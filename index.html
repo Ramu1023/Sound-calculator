@@ -3,296 +3,425 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Depth & Tone Analyzer</title>
-    
-    <!-- Tailwind CSS for styling -->
+    <title>Advanced Voice Profiler</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
-    
-    <!-- Font Awesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .gradient-bg { background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); }
-        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
-        canvas { width: 100%; height: 100%; }
+        body { font-family: 'Space Grotesk', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .bar-container { height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
+        .bar-fill { height: 100%; transition: width 0.3s ease; }
         
-        /* Pulse Animation for Recording */
-        @keyframes pulse-ring {
-            0% { transform: scale(0.8); opacity: 0.5; }
-            100% { transform: scale(2); opacity: 0; }
+        /* Animation for recording state */
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
         }
-        .recording-pulse::before {
-            content: '';
-            position: absolute;
-            left: 0; top: 0; width: 100%; height: 100%;
-            border-radius: 50%;
-            background-color: #EF4444;
-            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-            z-index: -1;
+        .recording-active { animation: pulse-red 2s infinite; }
+        
+        /* CRT scanline effect for visualizer */
+        .crt-overlay {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
         }
     </style>
 </head>
-<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+<body class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
 
-    <!-- Main Container -->
-    <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
+    <div class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        <!-- Header -->
-        <div class="gradient-bg p-6 text-white text-center relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-full h-full opacity-10">
-                <i class="fas fa-wave-square text-9xl absolute -right-4 -top-4"></i>
+        <!-- Left Panel: Controls & Visuals -->
+        <div class="md:col-span-2 space-y-6">
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-white"><i class="fas fa-wave-square text-cyan-400 mr-2"></i>Voice Profiler</h1>
+                        <p class="text-slate-400 text-sm">Real-time Spectral Analysis</p>
+                    </div>
+                    <div id="status-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400">IDLE</div>
+                </div>
+
+                <!-- Text Prompt -->
+                <div class="bg-slate-800/50 rounded-xl p-6 mb-6 border-l-4 border-cyan-500">
+                    <p class="text-xs text-cyan-400 font-bold uppercase tracking-wider mb-2">Read Aloud</p>
+                    <p id="text-prompt" class="text-xl text-white font-light leading-relaxed">
+                        "The quality of a voice is not just in its pitch, but in the texture and rhythm of the words spoken."
+                    </p>
+                    <button onclick="newSentence()" class="mt-4 text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors">
+                        <i class="fas fa-sync-alt"></i> New Sentence
+                    </button>
+                </div>
+
+                <!-- Visualizer -->
+                <div class="relative h-48 bg-black rounded-xl overflow-hidden border border-slate-700 shadow-inner">
+                    <canvas id="visualizer" class="w-full h-full"></canvas>
+                    <div class="crt-overlay absolute inset-0"></div>
+                    
+                    <!-- Real-time Metrics Overlay -->
+                    <div class="absolute top-2 right-2 flex flex-col items-end gap-1 pointer-events-none">
+                        <span class="text-[10px] font-mono text-green-400 bg-black/50 px-1 rounded">Hz: <span id="rt-hz">--</span></span>
+                        <span class="text-[10px] font-mono text-yellow-400 bg-black/50 px-1 rounded">dB: <span id="rt-db">--</span></span>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-4 mt-6">
+                    <button id="btn-record" onclick="toggleRecording()" class="flex-1 py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-900/50">
+                        <i class="fas fa-microphone"></i> <span>Start Analysis</span>
+                    </button>
+                </div>
             </div>
-            <h1 class="text-2xl font-bold relative z-10"><i class="fas fa-microphone-lines mr-2"></i>Vocal Analyzer</h1>
-            <p class="text-indigo-100 text-sm mt-1 relative z-10">Read & Discover your Voice Profile</p>
         </div>
 
-        <!-- Content Area -->
-        <div class="p-6 space-y-6">
+        <!-- Right Panel: The Report -->
+        <div class="md:col-span-1 glass-panel rounded-2xl p-6 flex flex-col h-full">
+            <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <i class="fas fa-fingerprint text-purple-400"></i> Voice Signature
+            </h2>
+            
+            <div id="analysis-placeholder" class="flex-1 flex flex-col items-center justify-center text-slate-500 text-center p-4">
+                <i class="fas fa-chart-bar text-4xl mb-3 opacity-20"></i>
+                <p class="text-sm">Record your voice to generate a full timbre, pitch, and pace report.</p>
+            </div>
 
-            <!-- Practice Card -->
-            <div class="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-6 text-center relative group transition-all hover:border-indigo-400">
-                <span class="absolute top-3 left-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Read Aloud</span>
-                <button onclick="changeSentence()" class="absolute top-2 right-2 text-slate-400 hover:text-indigo-600 p-2 transition-colors" title="Change Text">
-                    <i class="fas fa-sync-alt"></i>
-                </button>
+            <div id="analysis-results" class="hidden space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 
-                <p id="text-prompt" class="text-xl text-slate-800 font-medium mt-4 leading-relaxed">
-                    "The quick brown fox jumps over the lazy dog."
-                </p>
-            </div>
-
-            <!-- Visualizer -->
-            <div class="h-24 bg-black rounded-lg overflow-hidden relative shadow-inner">
-                <canvas id="visualizer"></canvas>
-                <div id="status-overlay" class="absolute inset-0 flex items-center justify-center text-slate-500 text-xs font-mono">
-                    <span id="status-text">Ready to Record</span>
-                </div>
-            </div>
-
-            <!-- Controls -->
-            <div class="flex justify-center gap-4">
-                <button id="btn-start" onclick="startAnalysis()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition transform hover:scale-105 shadow-lg shadow-indigo-200 flex items-center justify-center gap-2">
-                    <i class="fas fa-microphone"></i> Start
-                </button>
-                
-                <button id="btn-stop" onclick="stopAnalysis()" disabled class="flex-1 bg-slate-200 text-slate-400 font-bold py-3 px-6 rounded-xl transition cursor-not-allowed flex items-center justify-center gap-2 relative">
-                    <div id="recording-indicator" class="hidden w-3 h-3 bg-red-500 rounded-full absolute top-2 right-2 recording-pulse"></div>
-                    <i class="fas fa-stop"></i> Analyze
-                </button>
-            </div>
-
-            <!-- Results Section (Hidden by Default) -->
-            <div id="results-area" class="hidden space-y-4 animate-fade-in">
-                <div class="h-px bg-slate-200 w-full my-2"></div>
-                <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide">Analysis Results</h3>
-                
-                <!-- Metric: Depth -->
-                <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center justify-between">
-                    <div>
-                        <div class="text-xs font-bold text-blue-600 uppercase">Voice Depth</div>
-                        <div class="text-lg font-bold text-slate-800 mt-1"><span id="res-pitch">0</span> Hz</div>
-                        <div id="res-depth-label" class="text-sm text-blue-800 font-medium">Analyzing...</div>
+                <!-- 1. Pitch / Frequency -->
+                <div>
+                    <div class="flex justify-between text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">
+                        <span>Frequency (Pitch)</span>
+                        <span class="text-white" id="res-pitch-val">-- Hz</span>
                     </div>
-                    <div class="h-10 w-10 bg-blue-200 rounded-full flex items-center justify-center text-blue-600">
-                        <i class="fas fa-arrow-down-long"></i>
+                    <div class="bar-container">
+                        <div id="bar-pitch" class="bar-fill bg-gradient-to-r from-blue-500 to-cyan-400" style="width: 0%"></div>
                     </div>
+                    <p id="res-pitch-desc" class="text-xs text-slate-400 mt-1">Analyzing...</p>
                 </div>
 
-                <!-- Metric: Tone -->
-                <div class="bg-purple-50 border border-purple-100 p-4 rounded-xl flex items-center justify-between">
-                    <div>
-                        <div class="text-xs font-bold text-purple-600 uppercase">Tone Variation</div>
-                        <div class="text-lg font-bold text-slate-800 mt-1"><span id="res-var">0</span></div>
-                        <div id="res-tone-label" class="text-sm text-purple-800 font-medium">Analyzing...</div>
+                <!-- 2. Timbre (Spectral Centroid) -->
+                <div>
+                    <div class="flex justify-between text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">
+                        <span>Timbre (Brightness)</span>
+                        <span class="text-white" id="res-timbre-val">--</span>
                     </div>
-                    <div class="h-10 w-10 bg-purple-200 rounded-full flex items-center justify-center text-purple-600">
-                        <i class="fas fa-wave-square text-xs"></i>
+                    <div class="bar-container bg-slate-700">
+                        <!-- Gradient represents Warm (Left) to Bright (Right) -->
+                        <div id="bar-timbre" class="h-full w-1 bg-white relative transition-all duration-500 shadow-[0_0_10px_rgba(255,255,255,0.8)]" style="left: 50%"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                        <span>Warm/Dark</span>
+                        <span>Bright/Sharp</span>
+                    </div>
+                    <p id="res-timbre-desc" class="text-xs text-slate-400 mt-1">Analyzing...</p>
+                </div>
+
+                <!-- 3. Speaking Pace -->
+                <div>
+                    <div class="flex justify-between text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">
+                        <span>Pace</span>
+                        <span class="text-white" id="res-pace-val">-- SPM</span>
+                    </div>
+                    <div class="bar-container">
+                        <div id="bar-pace" class="bar-fill bg-gradient-to-r from-green-500 to-emerald-400" style="width: 0%"></div>
+                    </div>
+                    <p id="res-pace-desc" class="text-xs text-slate-400 mt-1">Syllables per min</p>
+                </div>
+
+                <!-- 4. Volume / Energy -->
+                <div>
+                    <div class="flex justify-between text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">
+                        <span>Volume (Energy)</span>
+                        <span class="text-white" id="res-vol-val">-- dB</span>
+                    </div>
+                    <div class="bar-container">
+                        <div id="bar-vol" class="bar-fill bg-gradient-to-r from-orange-500 to-red-400" style="width: 0%"></div>
                     </div>
                 </div>
 
-                <!-- Summary -->
-                <div class="bg-slate-100 p-3 rounded-lg text-xs text-slate-600 leading-relaxed italic" id="res-summary">
-                    Analysis complete.
-                </div>
             </div>
-
         </div>
     </div>
 
     <script>
-        // --- Configuration & State ---
-        const sentences = [
-            "The quick brown fox jumps over the lazy dog.",
-            "Success is not final, failure is not fatal.",
-            "To be or not to be, that is the question.",
-            "A journey of a thousand miles begins with a single step.",
-            "Hello world, I am testing my voice today."
-        ];
-
-        let audioContext;
-        let analyser;
-        let microphone;
-        let javascriptNode;
+        // --- State Variables ---
+        let audioCtx, analyser, microphone, source;
         let isRecording = false;
-        let pitchSamples = [];
         let animationId;
+        let startTime;
+        
+        // Data Collectors
+        let pitchSamples = [];
+        let centroidSamples = [];
+        let volumeSamples = [];
+        let syllableCount = 0;
+        let lastEnvelope = 0;
+        let envelopeThreshold = 0.02; // Sensitivity for syllable detection
+        let isSpeaking = false;
 
-        // --- DOM Elements ---
-        const btnStart = document.getElementById('btn-start');
-        const btnStop = document.getElementById('btn-stop');
-        const statusText = document.getElementById('status-text');
-        const resultsArea = document.getElementById('results-area');
-        const recordingIndicator = document.getElementById('recording-indicator');
+        // UI References
         const canvas = document.getElementById('visualizer');
         const canvasCtx = canvas.getContext('2d');
+        const btnRecord = document.getElementById('btn-record');
+        const statusBadge = document.getElementById('status-badge');
+        
+        // Sentences
+        const sentences = [
+            "The quality of a voice is not just in its pitch, but in the texture and rhythm of the words spoken.",
+            "Timbre describes the unique color of a sound, distinguishing a flute from a violin even when playing the same note.",
+            "Clear pronunciation and a steady pace are the hallmarks of a confident speaker.",
+            "A journey of a thousand miles begins with a single step, but the direction matters more than the speed.",
+            "Physics determines the frequency, but emotion determines the tone."
+        ];
 
-        // --- Core Functions ---
-
-        function changeSentence() {
-            const index = Math.floor(Math.random() * sentences.length);
-            document.getElementById('text-prompt').innerText = `"${sentences[index]}"`;
-            resetUI();
+        function newSentence() {
+            const txt = sentences[Math.floor(Math.random() * sentences.length)];
+            document.getElementById('text-prompt').innerText = `"${txt}"`;
         }
 
-        function resetUI() {
-            resultsArea.classList.add('hidden');
-            statusText.innerText = "Ready to Record";
-            statusText.parentElement.style.opacity = "1";
-            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-        }
+        // --- Main Control Flow ---
 
-        async function startAnalysis() {
-            try {
-                // Initialize Audio Context
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 2048;
+        async function toggleRecording() {
+            if (!isRecording) {
+                // Start
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    analyser = audioCtx.createAnalyser();
+                    analyser.fftSize = 2048;
+                    analyser.smoothingTimeConstant = 0.8;
+                    
+                    microphone = audioCtx.createMediaStreamSource(stream);
+                    microphone.connect(analyser);
 
-                // Get Microphone Stream
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                microphone = audioContext.createMediaStreamSource(stream);
-                microphone.connect(analyser);
+                    // Reset Data
+                    pitchSamples = [];
+                    centroidSamples = [];
+                    volumeSamples = [];
+                    syllableCount = 0;
+                    startTime = Date.now();
+                    
+                    isRecording = true;
+                    updateUI(true);
+                    loop();
 
-                // Start Visualizer & Data Collection
-                isRecording = true;
-                pitchSamples = [];
-                updateUIState(true);
-                visualize();
-                collectData();
-
-            } catch (err) {
-                alert("Microphone access denied or not supported. Please allow permissions.");
-                console.error(err);
-            }
-        }
-
-        function stopAnalysis() {
-            if (!isRecording) return;
-            
-            isRecording = false;
-            cancelAnimationFrame(animationId);
-            
-            if (microphone) microphone.disconnect();
-            if (audioContext) audioContext.close();
-
-            updateUIState(false);
-            processAudioData();
-        }
-
-        // --- UI State Management ---
-        function updateUIState(recording) {
-            if (recording) {
-                btnStart.disabled = true;
-                btnStart.classList.add('opacity-50', 'cursor-not-allowed');
-                btnStop.disabled = false;
-                btnStop.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
-                btnStop.classList.add('bg-slate-800', 'text-white', 'hover:bg-black');
-                statusText.parentElement.style.opacity = "0"; // Hide "Ready" text
-                recordingIndicator.classList.remove('hidden');
-            } else {
-                btnStart.disabled = false;
-                btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
-                btnStop.disabled = true;
-                btnStop.classList.add('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
-                btnStop.classList.remove('bg-slate-800', 'text-white', 'hover:bg-black');
-                recordingIndicator.classList.add('hidden');
-            }
-        }
-
-        // --- Visualizer ---
-        function visualize() {
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-
-            const draw = () => {
-                if (!isRecording) return;
-                animationId = requestAnimationFrame(draw);
-
-                analyser.getByteTimeDomainData(dataArray);
-
-                canvasCtx.fillStyle = 'rgb(0, 0, 0)';
-                canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
-
-                canvasCtx.lineWidth = 2;
-                canvasCtx.strokeStyle = '#818cf8'; // Indigo-400
-                canvasCtx.beginPath();
-
-                const sliceWidth = canvas.width * 1.0 / bufferLength;
-                let x = 0;
-
-                for (let i = 0; i < bufferLength; i++) {
-                    const v = dataArray[i] / 128.0;
-                    const y = v * canvas.height / 2;
-
-                    if (i === 0) canvasCtx.moveTo(x, y);
-                    else canvasCtx.lineTo(x, y);
-
-                    x += sliceWidth;
+                } catch (err) {
+                    alert("Microphone access denied. Please allow audio permissions.");
+                    console.error(err);
                 }
-
-                canvasCtx.lineTo(canvas.width, canvas.height / 2);
-                canvasCtx.stroke();
-            };
-            draw();
+            } else {
+                // Stop
+                isRecording = false;
+                cancelAnimationFrame(animationId);
+                microphone.disconnect();
+                audioCtx.close();
+                
+                updateUI(false);
+                analyzeFinalData();
+            }
         }
 
-        // --- Data Collection Loop ---
-        function collectData() {
-            if (!isRecording) return;
-
-            const bufferLength = analyser.fftSize;
-            const buffer = new Float32Array(bufferLength);
-            analyser.getFloatTimeDomainData(buffer);
-
-            const pitch = autoCorrelate(buffer, audioContext.sampleRate);
+        function updateUI(recording) {
+            const icon = recording ? '<i class="fas fa-stop"></i>' : '<i class="fas fa-microphone"></i>';
+            const text = recording ? 'Stop Analysis' : 'Start Analysis';
             
-            // Filter out silence (-1) and extremely high/low noise
-            if (pitch !== -1 && pitch > 50 && pitch < 1000) {
+            btnRecord.innerHTML = `${icon} <span>${text}</span>`;
+            
+            if (recording) {
+                btnRecord.classList.replace('bg-cyan-600', 'bg-red-500');
+                btnRecord.classList.replace('hover:bg-cyan-500', 'hover:bg-red-400');
+                btnRecord.classList.replace('shadow-cyan-900/50', 'shadow-red-900/50');
+                btnRecord.classList.add('recording-active');
+                statusBadge.innerText = "RECORDING";
+                statusBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/50";
+                
+                // Hide results, show placeholder
+                document.getElementById('analysis-results').classList.add('hidden');
+                document.getElementById('analysis-placeholder').classList.remove('hidden');
+            } else {
+                btnRecord.classList.replace('bg-red-500', 'bg-cyan-600');
+                btnRecord.classList.replace('hover:bg-red-400', 'hover:bg-cyan-500');
+                btnRecord.classList.replace('shadow-red-900/50', 'shadow-cyan-900/50');
+                btnRecord.classList.remove('recording-active');
+                statusBadge.innerText = "PROCESSED";
+                statusBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/50";
+            }
+        }
+
+        // --- Processing Loop ---
+
+        function loop() {
+            if (!isRecording) return;
+            animationId = requestAnimationFrame(loop);
+
+            const bufferLength = analyser.frequencyBinCount; // 1024
+            const timeData = new Uint8Array(bufferLength);
+            const freqData = new Uint8Array(bufferLength); // 0-255 scaling
+            
+            analyser.getByteTimeDomainData(timeData);
+            analyser.getByteFrequencyData(freqData);
+
+            // 1. Draw Visualizer
+            drawVisualizer(timeData, freqData);
+
+            // 2. Real-time Pitch (Auto-correlation)
+            const floatTimeData = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(floatTimeData);
+            const pitch = autoCorrelate(floatTimeData, audioCtx.sampleRate);
+            
+            if (pitch !== -1 && pitch > 60 && pitch < 600) {
                 pitchSamples.push(pitch);
+                document.getElementById('rt-hz').innerText = Math.round(pitch);
             }
 
-            // Collect data every 50ms
-            setTimeout(collectData, 50); 
+            // 3. Real-time Timbre (Spectral Centroid)
+            // Calculate center of mass of frequency spectrum
+            let numerator = 0;
+            let denominator = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                numerator += i * freqData[i];
+                denominator += freqData[i];
+            }
+            const centroidIndex = denominator === 0 ? 0 : numerator / denominator;
+            const nyquist = audioCtx.sampleRate / 2;
+            const centroidHz = (centroidIndex / bufferLength) * nyquist;
+            
+            // Only log timbre if there is significant sound
+            if (denominator > 1000) {
+                centroidSamples.push(centroidHz);
+            }
+
+            // 4. Real-time Volume (RMS) & Syllable Count
+            let sumSquares = 0;
+            for(let i=0; i < floatTimeData.length; i++){
+                sumSquares += floatTimeData[i] * floatTimeData[i];
+            }
+            const rms = Math.sqrt(sumSquares / floatTimeData.length);
+            const db = 20 * Math.log10(rms); // approximate
+            
+            volumeSamples.push(rms);
+            document.getElementById('rt-db').innerText = Math.max(-60, Math.round(db));
+
+            // Simple Envelope Follower for Syllables
+            // Hysteresis loop to detect peaks
+            if (rms > 0.05 && !isSpeaking) {
+                isSpeaking = true;
+                syllableCount++;
+            } else if (rms < 0.02 && isSpeaking) {
+                isSpeaking = false;
+            }
         }
 
-        // --- Physics & Algorithms (Autocorrelation) ---
+        // --- Analysis Logic ---
+
+        function analyzeFinalData() {
+            if (pitchSamples.length === 0) return;
+
+            // Show Results Panel
+            document.getElementById('analysis-placeholder').classList.add('hidden');
+            document.getElementById('analysis-results').classList.remove('hidden');
+
+            // 1. Average Pitch
+            const avgPitch = pitchSamples.reduce((a,b)=>a+b,0) / pitchSamples.length;
+            const pitchPercent = Math.min(100, Math.max(0, (avgPitch - 50) / 2.5)); // Map 50Hz-300Hz to 0-100%
+            
+            document.getElementById('res-pitch-val').innerText = Math.round(avgPitch) + " Hz";
+            document.getElementById('bar-pitch').style.width = pitchPercent + "%";
+            
+            let pitchDesc = "Neutral";
+            if(avgPitch < 100) pitchDesc = "Very Deep (Bass)";
+            else if(avgPitch < 160) pitchDesc = "Deep/Solid (Baritone)";
+            else if(avgPitch < 220) pitchDesc = "Standard/Conversational";
+            else pitchDesc = "High/Bright";
+            document.getElementById('res-pitch-desc').innerText = pitchDesc;
+
+            // 2. Average Timbre (Spectral Centroid)
+            // Low centroid (<1000Hz) = Warm/Muffled. High (>3000Hz) = Bright/Sharp.
+            // Human speech brightness usually falls 500-2000 range for centroid.
+            const avgCentroid = centroidSamples.length > 0 ? centroidSamples.reduce((a,b)=>a+b,0) / centroidSamples.length : 0;
+            
+            // Map 200Hz - 2500Hz to 0 - 100%
+            let timbrePercent = Math.min(100, Math.max(0, ((avgCentroid - 200) / 2300) * 100));
+            
+            document.getElementById('bar-timbre').style.left = timbrePercent + "%";
+            document.getElementById('res-timbre-val').innerText = Math.round(avgCentroid);
+            
+            let timbreDesc = "Balanced";
+            if(avgCentroid < 600) timbreDesc = "Warm, Rich, Dark";
+            else if(avgCentroid < 1200) timbreDesc = "Neutral, Clear";
+            else timbreDesc = "Bright, Sharp, Piercing";
+            document.getElementById('res-timbre-desc').innerText = timbreDesc;
+
+            // 3. Speaking Pace
+            const durationSec = (Date.now() - startTime) / 1000;
+            const spm = Math.round((syllableCount / durationSec) * 60); // Syllables Per Minute
+            
+            // Avg SPM is 150-250 for English
+            const pacePercent = Math.min(100, Math.max(0, (spm / 350) * 100));
+            
+            document.getElementById('res-pace-val').innerText = spm + " SPM";
+            document.getElementById('bar-pace').style.width = pacePercent + "%";
+            
+            let paceDesc = "Normal Pace";
+            if(spm < 120) paceDesc = "Slow, Deliberate";
+            else if(spm > 250) paceDesc = "Fast, Energetic";
+            document.getElementById('res-pace-desc').innerText = paceDesc;
+
+            // 4. Volume
+            const avgVol = volumeSamples.reduce((a,b)=>a+b,0) / volumeSamples.length;
+            const avgDb = 20 * Math.log10(avgVol);
+            // Map -40dB to -10dB roughly
+            const volPercent = Math.min(100, Math.max(0, (avgDb + 50) * 2.5));
+            
+            document.getElementById('res-vol-val').innerText = Math.round(avgDb) + " dB";
+            document.getElementById('bar-vol').style.width = volPercent + "%";
+        }
+
+        // --- Visuals ---
+
+        function drawVisualizer(timeData, freqData) {
+            // Draw Waveform
+            canvasCtx.fillStyle = 'rgb(0, 0, 0)';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Frequency Bars (Background)
+            const barWidth = (canvas.width / freqData.length) * 2.5;
+            let barX = 0;
+            for(let i = 0; i < freqData.length; i++) {
+                const barHeight = freqData[i] / 2;
+                canvasCtx.fillStyle = `rgba(6, 182, 212, ${freqData[i]/500})`; // Cyan low opacity
+                canvasCtx.fillRect(barX, canvas.height - barHeight, barWidth, barHeight);
+                barX += barWidth + 1;
+            }
+
+            // Time Domain (Line)
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#22d3ee'; // Cyan-400
+            canvasCtx.beginPath();
+            const sliceWidth = canvas.width * 1.0 / timeData.length;
+            let x = 0;
+            for(let i = 0; i < timeData.length; i++) {
+                const v = timeData[i] / 128.0;
+                const y = v * canvas.height / 2;
+                if(i === 0) canvasCtx.moveTo(x, y);
+                else canvasCtx.lineTo(x, y);
+                x += sliceWidth;
+            }
+            canvasCtx.stroke();
+        }
+
+        // --- Pitch Algorithm ---
         function autoCorrelate(buf, sampleRate) {
+            // Simple RMS check for silence
             let size = buf.length;
             let rms = 0;
-
-            // 1. Calculate RMS (Volume) to detect silence
-            for (let i = 0; i < size; i++) {
-                const val = buf[i];
-                rms += val * val;
-            }
+            for (let i = 0; i < size; i++) rms += buf[i] * buf[i];
             rms = Math.sqrt(rms / size);
-            if (rms < 0.02) return -1; // Silence
+            if (rms < 0.01) return -1;
 
-            // 2. Autocorrelation
+            // Auto-correlation
             let r1 = 0, r2 = size - 1, thres = 0.2;
             for (let i = 0; i < size / 2; i++) {
                 if (Math.abs(buf[i]) < thres) { r1 = i; break; }
@@ -300,7 +429,6 @@
             for (let i = 1; i < size / 2; i++) {
                 if (Math.abs(buf[size - i]) < thres) { r2 = size - i; break; }
             }
-
             const newBuf = buf.slice(r1, r2);
             size = newBuf.length;
 
@@ -310,7 +438,6 @@
                     c[i] = c[i] + newBuf[j] * newBuf[j + i];
                 }
             }
-
             let d = 0; while (c[d] > c[d + 1]) d++;
             let maxval = -1, maxpos = -1;
             for (let i = d; i < size; i++) {
@@ -320,56 +447,9 @@
                 }
             }
             let T0 = maxpos;
-
             return sampleRate / T0;
         }
 
-        // --- Result Processing ---
-        function processAudioData() {
-            resultsArea.classList.remove('hidden');
-
-            if (pitchSamples.length < 5) {
-                document.getElementById('res-pitch').innerText = "--";
-                document.getElementById('res-depth-label').innerText = "Audio too short/quiet";
-                document.getElementById('res-summary').innerText = "Please speak louder or longer.";
-                return;
-            }
-
-            // 1. Calculate Average Pitch
-            const sum = pitchSamples.reduce((a, b) => a + b, 0);
-            const avgPitch = Math.round(sum / pitchSamples.length);
-
-            // 2. Calculate Variance (Standard Deviation)
-            const squareDiffs = pitchSamples.map(value => Math.pow(value - avgPitch, 2));
-            const avgSquareDiff = squareDiffs.reduce((a, b) => a + b, 0) / squareDiffs.length;
-            const stdDev = Math.round(Math.sqrt(avgSquareDiff));
-
-            // 3. Determine Labels
-            let depthLabel = "Unknown";
-            let depthSummary = "";
-            
-            // Basic Frequency Ranges
-            if (avgPitch < 110) { depthLabel = "Deep / Bass"; depthSummary = "Your voice has a very strong, deep resonance."; }
-            else if (avgPitch < 165) { depthLabel = "Moderate / Baritone"; depthSummary = "You have a balanced, standard male-range pitch."; }
-            else if (avgPitch < 220) { depthLabel = "Neutral / Alto"; depthSummary = "Your voice is in a neutral range, common for female voices or higher male voices."; }
-            else { depthLabel = "High / Soprano"; depthSummary = "Your voice is bright and carries well at a higher frequency."; }
-
-            let toneLabel = "Neutral";
-            let toneSummary = "";
-
-            if (stdDev < 5) { toneLabel = "Monotone"; toneSummary = "Your pitch is very steady. Try adding more emotion for emphasis."; }
-            else if (stdDev < 25) { toneLabel = "Stable"; toneSummary = "Your speech is clear and controlled."; }
-            else { toneLabel = "Expressive"; toneSummary = "You use a lot of dynamic range in your speech, which is engaging."; }
-
-            // 4. Update UI
-            document.getElementById('res-pitch').innerText = avgPitch;
-            document.getElementById('res-depth-label').innerText = depthLabel;
-            
-            document.getElementById('res-var').innerText = stdDev;
-            document.getElementById('res-tone-label').innerText = toneLabel;
-            
-            document.getElementById('res-summary').innerText = `${depthSummary} ${toneSummary}`;
-        }
     </script>
 </body>
 </html>
