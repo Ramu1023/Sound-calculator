@@ -3,425 +3,346 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Voice Profiler</title>
+    <title>Voice Match & Frequency Test</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Space Grotesk', sans-serif; background-color: #0f172a; color: #e2e8f0; }
-        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .bar-container { height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
-        .bar-fill { height: 100%; transition: width 0.3s ease; }
+        body { font-family: 'Outfit', sans-serif; background-color: #111827; color: #f3f4f6; }
         
-        /* Animation for recording state */
-        @keyframes pulse-red {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        /* Mic Button Pulse Animation */
+        @keyframes ripple {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+            70% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
-        .recording-active { animation: pulse-red 2s infinite; }
-        
-        /* CRT scanline effect for visualizer */
-        .crt-overlay {
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            background-size: 100% 2px, 3px 100%;
-            pointer-events: none;
+        .recording {
+            animation: ripple 1.5s infinite;
+            background-color: #ef4444 !important; /* Red when recording */
+            transform: scale(1.05);
         }
+
+        /* Success/Fail Animations */
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+<body class="min-h-screen flex items-center justify-center p-4">
 
-    <div class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="max-w-md w-full bg-gray-900 rounded-3xl shadow-2xl border border-gray-800 overflow-hidden relative">
         
-        <!-- Left Panel: Controls & Visuals -->
-        <div class="md:col-span-2 space-y-6">
-            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h1 class="text-2xl font-bold text-white"><i class="fas fa-wave-square text-cyan-400 mr-2"></i>Voice Profiler</h1>
-                        <p class="text-slate-400 text-sm">Real-time Spectral Analysis</p>
-                    </div>
-                    <div id="status-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400">IDLE</div>
-                </div>
-
-                <!-- Text Prompt -->
-                <div class="bg-slate-800/50 rounded-xl p-6 mb-6 border-l-4 border-cyan-500">
-                    <p class="text-xs text-cyan-400 font-bold uppercase tracking-wider mb-2">Read Aloud</p>
-                    <p id="text-prompt" class="text-xl text-white font-light leading-relaxed">
-                        "The quality of a voice is not just in its pitch, but in the texture and rhythm of the words spoken."
-                    </p>
-                    <button onclick="newSentence()" class="mt-4 text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors">
-                        <i class="fas fa-sync-alt"></i> New Sentence
-                    </button>
-                </div>
-
-                <!-- Visualizer -->
-                <div class="relative h-48 bg-black rounded-xl overflow-hidden border border-slate-700 shadow-inner">
-                    <canvas id="visualizer" class="w-full h-full"></canvas>
-                    <div class="crt-overlay absolute inset-0"></div>
-                    
-                    <!-- Real-time Metrics Overlay -->
-                    <div class="absolute top-2 right-2 flex flex-col items-end gap-1 pointer-events-none">
-                        <span class="text-[10px] font-mono text-green-400 bg-black/50 px-1 rounded">Hz: <span id="rt-hz">--</span></span>
-                        <span class="text-[10px] font-mono text-yellow-400 bg-black/50 px-1 rounded">dB: <span id="rt-db">--</span></span>
-                    </div>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="flex gap-4 mt-6">
-                    <button id="btn-record" onclick="toggleRecording()" class="flex-1 py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-900/50">
-                        <i class="fas fa-microphone"></i> <span>Start Analysis</span>
-                    </button>
-                </div>
-            </div>
+        <!-- Header -->
+        <div class="bg-gray-800 p-5 text-center border-b border-gray-700">
+            <h1 class="text-xl font-bold text-white flex justify-center items-center gap-2">
+                <i class="fas fa-fingerprint text-blue-500"></i> Voice Match Test
+            </h1>
+            <p class="text-xs text-gray-400 mt-1">Say the words below to test your frequency</p>
         </div>
 
-        <!-- Right Panel: The Report -->
-        <div class="md:col-span-1 glass-panel rounded-2xl p-6 flex flex-col h-full">
-            <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <i class="fas fa-fingerprint text-purple-400"></i> Voice Signature
-            </h2>
+        <div class="p-8 flex flex-col items-center">
             
-            <div id="analysis-placeholder" class="flex-1 flex flex-col items-center justify-center text-slate-500 text-center p-4">
-                <i class="fas fa-chart-bar text-4xl mb-3 opacity-20"></i>
-                <p class="text-sm">Record your voice to generate a full timbre, pitch, and pace report.</p>
+            <!-- Target Phrase -->
+            <div class="text-center mb-8 w-full">
+                <p class="text-xs text-blue-400 font-bold uppercase tracking-widest mb-2">Target Phrase</p>
+                <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700 relative group">
+                    <button onclick="generatePhrase()" class="absolute top-2 right-2 text-gray-500 hover:text-white transition-colors" title="Change words">
+                        <i class="fas fa-sync-alt text-sm"></i>
+                    </button>
+                    <h2 id="target-text" class="text-3xl font-extrabold text-white tracking-tight">Blue sky</h2>
+                </div>
             </div>
 
-            <div id="analysis-results" class="hidden space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <!-- Big Mic Button -->
+            <div class="relative flex justify-center items-center mb-8 h-32">
+                <button id="mic-btn" onclick="toggleTest()" class="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center text-white text-3xl shadow-lg transition-all duration-300 hover:bg-blue-500 z-10">
+                    <i id="mic-icon" class="fas fa-microphone"></i>
+                </button>
+                <div id="listen-status" class="absolute -bottom-6 text-sm text-gray-400 font-medium tracking-wide opacity-0 transition-opacity">Listening...</div>
+            </div>
+
+            <!-- Visualizer -->
+            <div class="w-full h-16 bg-gray-950 rounded-lg overflow-hidden border border-gray-800 mb-6 relative">
+                <canvas id="visualizer" class="w-full h-full"></canvas>
+            </div>
+
+            <!-- Error Message Box -->
+            <div id="error-box" class="hidden w-full bg-red-900/30 border border-red-800 text-red-400 text-sm p-3 rounded-lg text-center mb-4">
+                Error message goes here.
+            </div>
+
+            <!-- Results Section -->
+            <div id="results-area" class="hidden w-full space-y-4 animate-pop">
+                <div class="border-t border-gray-800 pt-6"></div>
                 
-                <!-- 1. Pitch / Frequency -->
-                <div>
-                    <div class="flex justify-between text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">
-                        <span>Frequency (Pitch)</span>
-                        <span class="text-white" id="res-pitch-val">-- Hz</span>
-                    </div>
-                    <div class="bar-container">
-                        <div id="bar-pitch" class="bar-fill bg-gradient-to-r from-blue-500 to-cyan-400" style="width: 0%"></div>
-                    </div>
-                    <p id="res-pitch-desc" class="text-xs text-slate-400 mt-1">Analyzing...</p>
+                <!-- Match Status -->
+                <div id="match-card" class="rounded-xl p-4 text-center border border-gray-700">
+                    <div id="match-icon" class="text-4xl mb-2">✅</div>
+                    <h3 id="match-title" class="text-lg font-bold text-white mb-1">Perfect Match!</h3>
+                    <p class="text-sm text-gray-400">You said: <span id="user-transcript" class="text-white font-semibold">"Blue sky"</span></p>
                 </div>
 
-                <!-- 2. Timbre (Spectral Centroid) -->
-                <div>
-                    <div class="flex justify-between text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">
-                        <span>Timbre (Brightness)</span>
-                        <span class="text-white" id="res-timbre-val">--</span>
+                <!-- Frequency Range -->
+                <div class="bg-gray-800 rounded-xl p-4 flex items-center justify-between border border-gray-700">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-indigo-900/50 flex items-center justify-center text-indigo-400">
+                            <i class="fas fa-wave-square"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-400 font-bold uppercase">Frequency Range</div>
+                            <div class="text-gray-500 text-xs mt-0.5">Min - Max Pitch</div>
+                        </div>
                     </div>
-                    <div class="bar-container bg-slate-700">
-                        <!-- Gradient represents Warm (Left) to Bright (Right) -->
-                        <div id="bar-timbre" class="h-full w-1 bg-white relative transition-all duration-500 shadow-[0_0_10px_rgba(255,255,255,0.8)]" style="left: 50%"></div>
-                    </div>
-                    <div class="flex justify-between text-[10px] text-slate-500 mt-1">
-                        <span>Warm/Dark</span>
-                        <span>Bright/Sharp</span>
-                    </div>
-                    <p id="res-timbre-desc" class="text-xs text-slate-400 mt-1">Analyzing...</p>
-                </div>
-
-                <!-- 3. Speaking Pace -->
-                <div>
-                    <div class="flex justify-between text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">
-                        <span>Pace</span>
-                        <span class="text-white" id="res-pace-val">-- SPM</span>
-                    </div>
-                    <div class="bar-container">
-                        <div id="bar-pace" class="bar-fill bg-gradient-to-r from-green-500 to-emerald-400" style="width: 0%"></div>
-                    </div>
-                    <p id="res-pace-desc" class="text-xs text-slate-400 mt-1">Syllables per min</p>
-                </div>
-
-                <!-- 4. Volume / Energy -->
-                <div>
-                    <div class="flex justify-between text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">
-                        <span>Volume (Energy)</span>
-                        <span class="text-white" id="res-vol-val">-- dB</span>
-                    </div>
-                    <div class="bar-container">
-                        <div id="bar-vol" class="bar-fill bg-gradient-to-r from-orange-500 to-red-400" style="width: 0%"></div>
+                    <div class="text-right">
+                        <div id="freq-range" class="text-lg font-bold text-white">120 - 240 Hz</div>
+                        <div class="text-xs text-indigo-400 mt-0.5">Avg: <span id="freq-avg">180</span> Hz</div>
                     </div>
                 </div>
-
             </div>
+
         </div>
     </div>
 
     <script>
-        // --- State Variables ---
-        let audioCtx, analyser, microphone, source;
-        let isRecording = false;
-        let animationId;
-        let startTime;
-        
-        // Data Collectors
-        let pitchSamples = [];
-        let centroidSamples = [];
-        let volumeSamples = [];
-        let syllableCount = 0;
-        let lastEnvelope = 0;
-        let envelopeThreshold = 0.02; // Sensitivity for syllable detection
-        let isSpeaking = false;
-
-        // UI References
-        const canvas = document.getElementById('visualizer');
-        const canvasCtx = canvas.getContext('2d');
-        const btnRecord = document.getElementById('btn-record');
-        const statusBadge = document.getElementById('status-badge');
-        
-        // Sentences
-        const sentences = [
-            "The quality of a voice is not just in its pitch, but in the texture and rhythm of the words spoken.",
-            "Timbre describes the unique color of a sound, distinguishing a flute from a violin even when playing the same note.",
-            "Clear pronunciation and a steady pace are the hallmarks of a confident speaker.",
-            "A journey of a thousand miles begins with a single step, but the direction matters more than the speed.",
-            "Physics determines the frequency, but emotion determines the tone."
+        // --- Word Bank (2-3 words) ---
+        const phrases = [
+            "Blue sky", "Hello world", "Voice test", "Red apple", 
+            "Good morning", "Open door", "Dark night", "Green tree", 
+            "Cold water", "Warm sun", "Speak loud", "Clear tone"
         ];
 
-        function newSentence() {
-            const txt = sentences[Math.floor(Math.random() * sentences.length)];
-            document.getElementById('text-prompt').innerText = `"${txt}"`;
-        }
+        // --- State ---
+        let targetPhrase = "";
+        let isTesting = false;
+        
+        // Audio & Speech Recognition Objects
+        let recognition = null;
+        let audioCtx, analyser, microphone;
+        let animationId;
+        let pitchSamples = [];
 
-        // --- Main Control Flow ---
+        // UI Elements
+        const targetTextEl = document.getElementById('target-text');
+        const micBtn = document.getElementById('mic-btn');
+        const micIcon = document.getElementById('mic-icon');
+        const listenStatus = document.getElementById('listen-status');
+        const resultsArea = document.getElementById('results-area');
+        const errorBox = document.getElementById('error-box');
+        const canvas = document.getElementById('visualizer');
+        const canvasCtx = canvas.getContext('2d');
 
-        async function toggleRecording() {
-            if (!isRecording) {
-                // Start
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    analyser = audioCtx.createAnalyser();
-                    analyser.fftSize = 2048;
-                    analyser.smoothingTimeConstant = 0.8;
-                    
-                    microphone = audioCtx.createMediaStreamSource(stream);
-                    microphone.connect(analyser);
+        // --- Initialization ---
+        function init() {
+            generatePhrase();
+            
+            // Check Speech Recognition Support
+            window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (window.SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
 
-                    // Reset Data
-                    pitchSamples = [];
-                    centroidSamples = [];
-                    volumeSamples = [];
-                    syllableCount = 0;
-                    startTime = Date.now();
-                    
-                    isRecording = true;
-                    updateUI(true);
-                    loop();
-
-                } catch (err) {
-                    alert("Microphone access denied. Please allow audio permissions.");
-                    console.error(err);
-                }
+                recognition.onresult = handleSpeechResult;
+                recognition.onerror = handleSpeechError;
+                recognition.onspeechend = stopTestEnvironment;
             } else {
-                // Stop
-                isRecording = false;
-                cancelAnimationFrame(animationId);
-                microphone.disconnect();
-                audioCtx.close();
-                
-                updateUI(false);
-                analyzeFinalData();
+                showError("Speech Recognition is not supported in this browser. Please use Google Chrome or Edge.");
+                micBtn.disabled = true;
+                micBtn.classList.add('opacity-50', 'cursor-not-allowed');
             }
         }
 
-        function updateUI(recording) {
-            const icon = recording ? '<i class="fas fa-stop"></i>' : '<i class="fas fa-microphone"></i>';
-            const text = recording ? 'Stop Analysis' : 'Start Analysis';
-            
-            btnRecord.innerHTML = `${icon} <span>${text}</span>`;
-            
-            if (recording) {
-                btnRecord.classList.replace('bg-cyan-600', 'bg-red-500');
-                btnRecord.classList.replace('hover:bg-cyan-500', 'hover:bg-red-400');
-                btnRecord.classList.replace('shadow-cyan-900/50', 'shadow-red-900/50');
-                btnRecord.classList.add('recording-active');
-                statusBadge.innerText = "RECORDING";
-                statusBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/50";
+        function generatePhrase() {
+            targetPhrase = phrases[Math.floor(Math.random() * phrases.length)];
+            targetTextEl.innerText = targetPhrase;
+            hideResults();
+        }
+
+        function showError(msg) {
+            errorBox.innerText = msg;
+            errorBox.classList.remove('hidden');
+        }
+        function hideError() {
+            errorBox.classList.add('hidden');
+        }
+        function hideResults() {
+            resultsArea.classList.add('hidden');
+        }
+
+        // --- Test Execution ---
+        async function toggleTest() {
+            if (isTesting) {
+                stopTestEnvironment();
+                return;
+            }
+
+            hideError();
+            hideResults();
+            pitchSamples = [];
+
+            try {
+                // 1. Setup Audio Frequency Analyzer
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 2048;
                 
-                // Hide results, show placeholder
-                document.getElementById('analysis-results').classList.add('hidden');
-                document.getElementById('analysis-placeholder').classList.remove('hidden');
-            } else {
-                btnRecord.classList.replace('bg-red-500', 'bg-cyan-600');
-                btnRecord.classList.replace('hover:bg-red-400', 'hover:bg-cyan-500');
-                btnRecord.classList.replace('shadow-red-900/50', 'shadow-cyan-900/50');
-                btnRecord.classList.remove('recording-active');
-                statusBadge.innerText = "PROCESSED";
-                statusBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-400 border border-green-500/50";
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                microphone = audioCtx.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+
+                // 2. Start Speech Recognition
+                recognition.start();
+
+                // 3. Update UI
+                isTesting = true;
+                micBtn.classList.add('recording');
+                micIcon.classList.replace('fa-microphone', 'fa-stop');
+                listenStatus.style.opacity = "1";
+                
+                // 4. Start processing audio data
+                processAudioLoop();
+
+            } catch (err) {
+                showError("Microphone access denied. Please allow permissions.");
+                console.error(err);
             }
         }
 
-        // --- Processing Loop ---
-
-        function loop() {
-            if (!isRecording) return;
-            animationId = requestAnimationFrame(loop);
-
-            const bufferLength = analyser.frequencyBinCount; // 1024
-            const timeData = new Uint8Array(bufferLength);
-            const freqData = new Uint8Array(bufferLength); // 0-255 scaling
+        function stopTestEnvironment() {
+            if (!isTesting) return;
+            isTesting = false;
             
-            analyser.getByteTimeDomainData(timeData);
-            analyser.getByteFrequencyData(freqData);
+            // UI Updates
+            micBtn.classList.remove('recording');
+            micIcon.classList.replace('fa-stop', 'fa-microphone');
+            listenStatus.style.opacity = "0";
 
-            // 1. Draw Visualizer
-            drawVisualizer(timeData, freqData);
+            // Stop Recognition & Audio
+            try { recognition.stop(); } catch(e){}
+            cancelAnimationFrame(animationId);
+            if(microphone) microphone.disconnect();
+            if(audioCtx) audioCtx.close();
+        }
 
-            // 2. Real-time Pitch (Auto-correlation)
-            const floatTimeData = new Float32Array(analyser.fftSize);
-            analyser.getFloatTimeDomainData(floatTimeData);
-            const pitch = autoCorrelate(floatTimeData, audioCtx.sampleRate);
+        // --- Data Collection (Real-time) ---
+        function processAudioLoop() {
+            if (!isTesting) return;
+            animationId = requestAnimationFrame(processAudioLoop);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const floatData = new Float32Array(analyser.fftSize);
+            const byteData = new Uint8Array(bufferLength);
             
+            analyser.getFloatTimeDomainData(floatData);
+            analyser.getByteTimeDomainData(byteData);
+
+            // Calculate Pitch
+            const pitch = autoCorrelate(floatData, audioCtx.sampleRate);
             if (pitch !== -1 && pitch > 60 && pitch < 600) {
                 pitchSamples.push(pitch);
-                document.getElementById('rt-hz').innerText = Math.round(pitch);
             }
 
-            // 3. Real-time Timbre (Spectral Centroid)
-            // Calculate center of mass of frequency spectrum
-            let numerator = 0;
-            let denominator = 0;
-            for (let i = 0; i < bufferLength; i++) {
-                numerator += i * freqData[i];
-                denominator += freqData[i];
-            }
-            const centroidIndex = denominator === 0 ? 0 : numerator / denominator;
-            const nyquist = audioCtx.sampleRate / 2;
-            const centroidHz = (centroidIndex / bufferLength) * nyquist;
-            
-            // Only log timbre if there is significant sound
-            if (denominator > 1000) {
-                centroidSamples.push(centroidHz);
-            }
-
-            // 4. Real-time Volume (RMS) & Syllable Count
-            let sumSquares = 0;
-            for(let i=0; i < floatTimeData.length; i++){
-                sumSquares += floatTimeData[i] * floatTimeData[i];
-            }
-            const rms = Math.sqrt(sumSquares / floatTimeData.length);
-            const db = 20 * Math.log10(rms); // approximate
-            
-            volumeSamples.push(rms);
-            document.getElementById('rt-db').innerText = Math.max(-60, Math.round(db));
-
-            // Simple Envelope Follower for Syllables
-            // Hysteresis loop to detect peaks
-            if (rms > 0.05 && !isSpeaking) {
-                isSpeaking = true;
-                syllableCount++;
-            } else if (rms < 0.02 && isSpeaking) {
-                isSpeaking = false;
-            }
+            // Draw Visualizer
+            drawVisualizer(byteData, bufferLength);
         }
 
-        // --- Analysis Logic ---
-
-        function analyzeFinalData() {
-            if (pitchSamples.length === 0) return;
-
-            // Show Results Panel
-            document.getElementById('analysis-placeholder').classList.add('hidden');
-            document.getElementById('analysis-results').classList.remove('hidden');
-
-            // 1. Average Pitch
-            const avgPitch = pitchSamples.reduce((a,b)=>a+b,0) / pitchSamples.length;
-            const pitchPercent = Math.min(100, Math.max(0, (avgPitch - 50) / 2.5)); // Map 50Hz-300Hz to 0-100%
-            
-            document.getElementById('res-pitch-val').innerText = Math.round(avgPitch) + " Hz";
-            document.getElementById('bar-pitch').style.width = pitchPercent + "%";
-            
-            let pitchDesc = "Neutral";
-            if(avgPitch < 100) pitchDesc = "Very Deep (Bass)";
-            else if(avgPitch < 160) pitchDesc = "Deep/Solid (Baritone)";
-            else if(avgPitch < 220) pitchDesc = "Standard/Conversational";
-            else pitchDesc = "High/Bright";
-            document.getElementById('res-pitch-desc').innerText = pitchDesc;
-
-            // 2. Average Timbre (Spectral Centroid)
-            // Low centroid (<1000Hz) = Warm/Muffled. High (>3000Hz) = Bright/Sharp.
-            // Human speech brightness usually falls 500-2000 range for centroid.
-            const avgCentroid = centroidSamples.length > 0 ? centroidSamples.reduce((a,b)=>a+b,0) / centroidSamples.length : 0;
-            
-            // Map 200Hz - 2500Hz to 0 - 100%
-            let timbrePercent = Math.min(100, Math.max(0, ((avgCentroid - 200) / 2300) * 100));
-            
-            document.getElementById('bar-timbre').style.left = timbrePercent + "%";
-            document.getElementById('res-timbre-val').innerText = Math.round(avgCentroid);
-            
-            let timbreDesc = "Balanced";
-            if(avgCentroid < 600) timbreDesc = "Warm, Rich, Dark";
-            else if(avgCentroid < 1200) timbreDesc = "Neutral, Clear";
-            else timbreDesc = "Bright, Sharp, Piercing";
-            document.getElementById('res-timbre-desc').innerText = timbreDesc;
-
-            // 3. Speaking Pace
-            const durationSec = (Date.now() - startTime) / 1000;
-            const spm = Math.round((syllableCount / durationSec) * 60); // Syllables Per Minute
-            
-            // Avg SPM is 150-250 for English
-            const pacePercent = Math.min(100, Math.max(0, (spm / 350) * 100));
-            
-            document.getElementById('res-pace-val').innerText = spm + " SPM";
-            document.getElementById('bar-pace').style.width = pacePercent + "%";
-            
-            let paceDesc = "Normal Pace";
-            if(spm < 120) paceDesc = "Slow, Deliberate";
-            else if(spm > 250) paceDesc = "Fast, Energetic";
-            document.getElementById('res-pace-desc').innerText = paceDesc;
-
-            // 4. Volume
-            const avgVol = volumeSamples.reduce((a,b)=>a+b,0) / volumeSamples.length;
-            const avgDb = 20 * Math.log10(avgVol);
-            // Map -40dB to -10dB roughly
-            const volPercent = Math.min(100, Math.max(0, (avgDb + 50) * 2.5));
-            
-            document.getElementById('res-vol-val').innerText = Math.round(avgDb) + " dB";
-            document.getElementById('bar-vol').style.width = volPercent + "%";
-        }
-
-        // --- Visuals ---
-
-        function drawVisualizer(timeData, freqData) {
-            // Draw Waveform
-            canvasCtx.fillStyle = 'rgb(0, 0, 0)';
+        function drawVisualizer(dataArray, bufferLength) {
+            canvasCtx.fillStyle = '#030712'; // gray-950
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Frequency Bars (Background)
-            const barWidth = (canvas.width / freqData.length) * 2.5;
-            let barX = 0;
-            for(let i = 0; i < freqData.length; i++) {
-                const barHeight = freqData[i] / 2;
-                canvasCtx.fillStyle = `rgba(6, 182, 212, ${freqData[i]/500})`; // Cyan low opacity
-                canvasCtx.fillRect(barX, canvas.height - barHeight, barWidth, barHeight);
-                barX += barWidth + 1;
-            }
-
-            // Time Domain (Line)
             canvasCtx.lineWidth = 2;
-            canvasCtx.strokeStyle = '#22d3ee'; // Cyan-400
+            canvasCtx.strokeStyle = isTesting ? '#ef4444' : '#3b82f6'; // Red if recording, Blue otherwise
             canvasCtx.beginPath();
-            const sliceWidth = canvas.width * 1.0 / timeData.length;
+
+            const sliceWidth = canvas.width * 1.0 / bufferLength;
             let x = 0;
-            for(let i = 0; i < timeData.length; i++) {
-                const v = timeData[i] / 128.0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
                 const y = v * canvas.height / 2;
-                if(i === 0) canvasCtx.moveTo(x, y);
+                if (i === 0) canvasCtx.moveTo(x, y);
                 else canvasCtx.lineTo(x, y);
                 x += sliceWidth;
             }
+            canvasCtx.lineTo(canvas.width, canvas.height / 2);
             canvasCtx.stroke();
+        }
+
+        // --- Results Processing ---
+        function handleSpeechResult(event) {
+            stopTestEnvironment();
+            const transcript = event.results[0][0].transcript.trim();
+            analyzeResults(transcript);
+        }
+
+        function handleSpeechError(event) {
+            stopTestEnvironment();
+            if(event.error === 'no-speech') {
+                showError("No speech detected. Please try again.");
+            } else {
+                showError("Speech recognition error: " + event.error);
+            }
+        }
+
+        function analyzeResults(transcript) {
+            // 1. Text Match Logic
+            // Clean strings (remove punctuation, lowercase) for fair comparison
+            const cleanTarget = targetPhrase.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+            const cleanTranscript = transcript.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+            
+            const isMatch = cleanTarget === cleanTranscript;
+
+            // 2. Frequency Range Logic
+            let minPitch = 0, maxPitch = 0, avgPitch = 0;
+            
+            if (pitchSamples.length > 0) {
+                minPitch = Math.round(Math.min(...pitchSamples));
+                maxPitch = Math.round(Math.max(...pitchSamples));
+                const sum = pitchSamples.reduce((a, b) => a + b, 0);
+                avgPitch = Math.round(sum / pitchSamples.length);
+            }
+
+            // 3. Update UI
+            document.getElementById('user-transcript').innerText = `"${transcript}"`;
+            
+            const matchCard = document.getElementById('match-card');
+            const matchTitle = document.getElementById('match-title');
+            const matchIcon = document.getElementById('match-icon');
+
+            if (isMatch) {
+                matchCard.className = "rounded-xl p-4 text-center border bg-green-900/20 border-green-800";
+                matchTitle.className = "text-lg font-bold text-green-400 mb-1";
+                matchTitle.innerText = "Perfect Match!";
+                matchIcon.innerText = "✅";
+            } else {
+                matchCard.className = "rounded-xl p-4 text-center border bg-red-900/20 border-red-800";
+                matchTitle.className = "text-lg font-bold text-red-400 mb-1";
+                matchTitle.innerText = "Mismatch";
+                matchIcon.innerText = "❌";
+            }
+
+            if (pitchSamples.length < 5) {
+                document.getElementById('freq-range').innerText = "Insufficient Data";
+                document.getElementById('freq-avg').innerText = "--";
+            } else {
+                document.getElementById('freq-range').innerText = `${minPitch} - ${maxPitch} Hz`;
+                document.getElementById('freq-avg').innerText = avgPitch;
+            }
+
+            resultsArea.classList.remove('hidden');
         }
 
         // --- Pitch Algorithm ---
         function autoCorrelate(buf, sampleRate) {
-            // Simple RMS check for silence
             let size = buf.length;
             let rms = 0;
             for (let i = 0; i < size; i++) rms += buf[i] * buf[i];
             rms = Math.sqrt(rms / size);
-            if (rms < 0.01) return -1;
+            if (rms < 0.02) return -1; // Ignore silence/noise
 
-            // Auto-correlation
             let r1 = 0, r2 = size - 1, thres = 0.2;
             for (let i = 0; i < size / 2; i++) {
                 if (Math.abs(buf[i]) < thres) { r1 = i; break; }
@@ -429,6 +350,7 @@
             for (let i = 1; i < size / 2; i++) {
                 if (Math.abs(buf[size - i]) < thres) { r2 = size - i; break; }
             }
+            
             const newBuf = buf.slice(r1, r2);
             size = newBuf.length;
 
@@ -450,6 +372,8 @@
             return sampleRate / T0;
         }
 
+        // Boot
+        window.onload = init;
     </script>
 </body>
 </html>
